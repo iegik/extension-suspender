@@ -21,7 +21,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "cypress": "^13.6.0"
+    "cypress": "^13.6.0",
+    "puppeteer": "^24.14.0"
   },
   "engines": {
     "node": ">=16.0.0"
