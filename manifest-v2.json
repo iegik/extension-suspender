@@ -1,0 +1,30 @@
+{
+  "manifest_version": 2,
+  "name": "Tab Suspender",
+  "description": "Suspends inactive tabs to save memory and CPU usage",
+  "version": "1.0.0",
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab",
+    "webNavigation",
+    "*://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "page_action": {
+    "default_icon": "icon.svg"
+  },
+  "background": {
+    "scripts": ["sw.js"]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
+}
