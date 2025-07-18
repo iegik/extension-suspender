@@ -86,6 +86,33 @@ make build
 make sign
 ```
 
+### E2E Testing
+
+The project includes Cypress E2E tests to verify the extension functionality:
+
+```bash
+# Install dependencies
+npm install
+
+# Run all tests
+npm test
+
+# Run specific E2E tests
+npm run test:e2e
+
+# Open Cypress Test Runner (interactive)
+npm run test:open
+```
+
+The tests verify:
+- Tab suspension after inactivity timeout
+- Tab restoration when activated
+- Active tab protection
+- Special page protection
+- Extension settings functionality
+
+See `cypress/README.md` for detailed testing information.
+
 ## Files
 
 - `manifest-v2.json` / `manifest-v3.json`: Extension manifests for different browser versions

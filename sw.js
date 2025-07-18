@@ -2,7 +2,7 @@
 if (typeof chrome !== 'undefined') browser = chrome;
 
 // Configuration
-const DEFAULT_INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minute
 const SUSPENDED_URL_PREFIX = 'about:blank#';
 
 // State management with persistence
@@ -348,6 +348,7 @@ browser.webNavigation.onBeforeNavigate.addListener(async (details) => {
 browser.storage.onChanged.addListener(async (changes) => {
   try {
     if (changes.inactivityTimeout) {
+      console.log('Timeout changed to:', changes.inactivityTimeout.newValue / 1000, 'seconds');
       settings.inactivityTimeout = changes.inactivityTimeout.newValue;
 
       // Reset all timers with new timeout
@@ -360,6 +361,8 @@ browser.storage.onChanged.addListener(async (changes) => {
           }
         });
       });
+
+      console.log('Found', currentTabs.length, 'tabs');
 
       // Clear all existing timers
       for (const [tabId, timer] of tabActivityTimers) {
@@ -378,14 +381,20 @@ browser.storage.onChanged.addListener(async (changes) => {
         });
       });
 
+      console.log('Active tabs:', activeTabs.map(t => t.id));
+
       for (const tab of currentTabs) {
         if (shouldSuspendTab(tab) && !activeTabs.some(activeTab => activeTab.id === tab.id)) {
+          console.log('Starting timer for tab:', tab.id, tab.url);
           resetActivityTimer(tab.id);
+        } else {
+          console.log('Not starting timer for tab:', tab.id, 'shouldSuspendTab:', shouldSuspendTab(tab), 'isActive:', activeTabs.some(activeTab => activeTab.id === tab.id));
         }
       }
     }
 
     if (changes.enabled) {
+      console.log('Extension enabled changed to:', changes.enabled.newValue);
       settings.enabled = changes.enabled.newValue;
 
       // If disabled, restore all suspended tabs

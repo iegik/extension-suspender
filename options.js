@@ -10,7 +10,7 @@ const statusSpan = document.getElementById('status');
 // Load current settings
 browser.storage.local.get(['enabled', 'inactivityTimeout'], (result) => {
   enabledCheckbox.checked = result.enabled !== false; // Default to true
-  timeoutInput.value = Math.max(1, Math.min(60, (result.inactivityTimeout || 5 * 60 * 1000) / (60 * 1000)));
+  timeoutInput.value = Math.max(1, Math.min(60, (result.inactivityTimeout || 1 * 60 * 1000) / (60 * 1000)));
 });
 
 // Save settings

@@ -1,0 +1,29 @@
+{
+  "name": "tab-suspender-extension",
+  "version": "1.0.0",
+  "description": "A browser extension that suspends inactive tabs to save memory and CPU usage",
+  "main": "sw.js",
+  "scripts": {
+    "test": "cypress run",
+    "test:open": "cypress open",
+    "test:e2e": "cypress run --spec 'cypress/e2e/tab-suspender.cy.js'",
+    "build": "make build",
+    "build:firefox": "make firefox && make build",
+    "build:chrome": "make chrome && make build"
+  },
+  "keywords": [
+    "browser-extension",
+    "tab-suspender",
+    "memory-optimization",
+    "chrome-extension",
+    "firefox-addon"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "cypress": "^13.6.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
