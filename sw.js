@@ -5,7 +5,7 @@ if (typeof chrome !== 'undefined') browser = chrome;
 const DEFAULT_INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const SUSPENDED_URL_PREFIX = 'about:blank#';
 
-// State management
+// State management with persistence
 let suspendedTabs = new Map(); // tabId -> originalUrl
 let tabActivityTimers = new Map(); // tabId -> timer
 let settings = {
@@ -13,15 +13,71 @@ let settings = {
   enabled: true
 };
 
-// Load settings from storage
-browser.storage.local.get(['inactivityTimeout', 'enabled'], (result) => {
-  if (result.inactivityTimeout !== undefined) {
-    settings.inactivityTimeout = result.inactivityTimeout;
+// Load settings and suspended tabs from storage
+async function loadPersistedState() {
+  try {
+    const result = await new Promise((resolve, reject) => {
+      browser.storage.local.get(['inactivityTimeout', 'enabled', 'suspendedTabs'], (result) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(result);
+        }
+      });
+    });
+
+    if (result.inactivityTimeout !== undefined) {
+      settings.inactivityTimeout = result.inactivityTimeout;
+    }
+    if (result.enabled !== undefined) {
+      settings.enabled = result.enabled;
+    }
+    if (result.suspendedTabs) {
+      suspendedTabs = new Map(Object.entries(result.suspendedTabs));
+    }
+  } catch (error) {
+    console.error('Error loading persisted state:', error);
   }
-  if (result.enabled !== undefined) {
-    settings.enabled = result.enabled;
+}
+
+// Save suspended tabs to storage
+async function saveSuspendedTabs() {
+  try {
+    const suspendedTabsObject = Object.fromEntries(suspendedTabs);
+    await new Promise((resolve, reject) => {
+      browser.storage.local.set({ suspendedTabs: suspendedTabsObject }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve();
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error saving suspended tabs:', error);
   }
-});
+}
+
+// Cleanup function for service worker
+function cleanup() {
+  try {
+    // Clear all timers
+    for (const [tabId, timer] of tabActivityTimers) {
+      clearTimeout(timer);
+    }
+    tabActivityTimers.clear();
+
+    // Save state before cleanup
+    saveSuspendedTabs();
+
+    console.log('Service worker cleanup completed');
+  } catch (error) {
+    console.error('Error during service worker cleanup:', error);
+  }
+}
+
+// Initialize state
+loadPersistedState();
 
 // Helper functions
 function isSuspendedUrl(url) {
@@ -82,6 +138,7 @@ async function suspendTab(tabId) {
 
     // Store original URL
     suspendedTabs.set(tabId, originalUrl);
+    await saveSuspendedTabs();
 
     // Step 1: Inject content script
     await new Promise((resolve, reject) => {
@@ -138,6 +195,7 @@ async function suspendTab(tabId) {
     // Clean up state on failure
     suspendedTabs.delete(tabId);
     clearActivityTimer(tabId);
+    await saveSuspendedTabs();
   }
 }
 
@@ -161,6 +219,7 @@ async function restoreTab(tabId) {
     });
 
     suspendedTabs.delete(tabId);
+    await saveSuspendedTabs();
     console.log(`Successfully restored tab ${tabId}: ${originalUrl}`);
   } catch (error) {
     console.error(`Failed to restore tab ${tabId}:`, error.message);
@@ -254,10 +313,15 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
-browser.tabs.onRemoved.addListener((tabId) => {
-  // Clean up timers and suspended tab data
-  clearActivityTimer(tabId);
-  suspendedTabs.delete(tabId);
+browser.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    // Clean up timers and suspended tab data
+    clearActivityTimer(tabId);
+    suspendedTabs.delete(tabId);
+    await saveSuspendedTabs();
+  } catch (error) {
+    console.error('Error handling tab removal:', error.message);
+  }
 });
 
 browser.webNavigation.onBeforeNavigate.addListener(async (details) => {
@@ -394,3 +458,27 @@ browser.runtime.onInstalled.addListener((details) => {
     });
   }
 });
+
+// Handle service worker lifecycle
+browser.runtime.onSuspend.addListener(() => {
+  cleanup();
+});
+
+// Periodic cleanup to prevent memory leaks
+setInterval(() => {
+  try {
+    // Clean up any orphaned timers
+    const currentTabs = Array.from(tabActivityTimers.keys());
+    browser.tabs.query({}, (tabs) => {
+      const existingTabIds = tabs.map(tab => tab.id);
+      for (const tabId of currentTabs) {
+        if (!existingTabIds.includes(tabId)) {
+          clearActivityTimer(tabId);
+          suspendedTabs.delete(tabId);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error during periodic cleanup:', error);
+  }
+}, 60000); // Run every minute
