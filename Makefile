@@ -16,43 +16,24 @@ sign:
 
 # Extension Suspender Makefile
 
-.PHONY: build test clean status help
+.PHONY: build test clean status help screenshots
 
-# Build the extension (show installation instructions)
-build:
-	@echo "Extension is ready to load in Chrome"
-	@echo "1. Open chrome://extensions/"
-	@echo "2. Enable Developer mode"
-	@echo "3. Click 'Load unpacked' and select this directory"
-
-# Test the extension
 test:
-	@echo "Testing the extension..."
-	@echo "1. Load the extension in Chrome (see 'make build')"
-	@echo "2. Open test.html in a new tab"
-	@echo "3. Set timeout to 30 seconds in extension options"
-	@echo "4. Switch to another tab and wait for suspension"
-	@echo "5. Check browser console for debug logs"
+	@npm run test
 
-# Clean up any generated files
-clean:
-	@echo "Cleaning up..."
-	@rm -f *.log
-	@echo "Clean complete"
+# Generate screenshots for extension store
+screenshots:
+	@echo "Generating screenshots for extension store..."
+	@node generate-screenshots.js
 
-# Show extension status
-status:
-	@echo "Extension files:"
-	@ls -la *.js *.json *.html 2>/dev/null || echo "No extension files found"
-	@echo ""
-	@echo "Test files:"
-	@ls -la test.html TESTING.md 2>/dev/null || echo "No test files found"
+icon:
+	@convert -background none -resize 128x128 icon.svg icon.png
 
 # Help
 help:
 	@echo "Available commands:"
-	@echo "  build  - Show instructions for loading extension"
-	@echo "  test   - Show testing instructions"
-	@echo "  clean  - Clean up generated files"
-	@echo "  status - Show extension file status"
-	@echo "  help   - Show this help message"
+	@echo "  build       - Show instructions for loading extension"
+	@echo "  test        - Show testing instructions"
+	@echo "  screenshots - Generate screenshots for extension store"
+	@echo "  clean       - Clean up generated files"
+	@echo "  help        - Show this help message"
