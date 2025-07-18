@@ -2,15 +2,18 @@
 if (typeof chrome !== 'undefined') browser = chrome;
 
 // Configuration
-const DEFAULT_INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minute
 const SUSPENDED_URL_PREFIX = 'about:blank#';
 
 // State management with persistence
 let suspendedTabs = new Map(); // tabId -> originalUrl
 let tabActivityTimers = new Map(); // tabId -> timer
-let settings = {
-  inactivityTimeout: DEFAULT_INACTIVITY_TIMEOUT,
+const defaultSettings = Object.freeze({
+  inactivityTimeout: 1 * 60 * 1000, // 1 minute
   enabled: true
+});
+
+const settings = {
+  ...defaultSettings
 };
 
 // Load settings and suspended tabs from storage
@@ -474,10 +477,7 @@ loadPersistedState().then(() => {
 browser.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install' || details.reason === 'update') {
     // Set default settings
-    browser.storage.local.set({
-      inactivityTimeout: DEFAULT_INACTIVITY_TIMEOUT,
-      enabled: true
-    }, () => {
+    browser.storage.local.set(defaultSettings, () => {
       if (chrome.runtime.lastError) {
         console.error('Failed to set default settings:', chrome.runtime.lastError.message);
       }
