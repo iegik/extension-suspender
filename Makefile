@@ -25,15 +25,21 @@ test:
 screenshots:
 	@echo "Generating screenshots for extension store..."
 	@node generate-screenshots.js
+	@echo "Optimizing PNG files with optipng..."
+	@optipng -o2 *.png
+	@echo "✓ Screenshots generated and optimized"
 
 icon:
-	@convert -background none -resize 128x128 icon.svg icon.png
+	@magick convert -background white -resize 128x128 icon.svg icon.png
 
 # Help
 help:
 	@echo "Available commands:"
-	@echo "  build       - Show instructions for loading extension"
-	@echo "  test        - Show testing instructions"
+	@echo "  firefox     - Switch to Firefox manifest"
+	@echo "  chrome      - Switch to Chrome manifest"
+	@echo "  build       - Build extension with web-ext"
+	@echo "  sign        - Sign extension for AMO"
+	@echo "  test        - Run tests"
 	@echo "  screenshots - Generate screenshots for extension store"
-	@echo "  clean       - Clean up generated files"
+	@echo "  icon        - Generate icon.png from icon.svg"
 	@echo "  help        - Show this help message"

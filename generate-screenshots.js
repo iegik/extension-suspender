@@ -41,7 +41,7 @@ async function generateScreenshots() {
       await page.setViewport({
         width: screenshot.width,
         height: screenshot.height,
-        deviceScaleFactor: 2 // Higher resolution for better quality
+        deviceScaleFactor: 1 // Use 1 to get exact dimensions
       });
 
       // Wait a bit for any animations to complete
@@ -50,7 +50,8 @@ async function generateScreenshots() {
       await page.screenshot({
         path: screenshot.name,
         fullPage: false,
-        type: 'png'
+        type: 'png',
+        omitBackground: false
       });
 
       console.log(`✓ Generated ${screenshot.name}`);
