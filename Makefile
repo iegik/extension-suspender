@@ -16,9 +16,9 @@ sign:
 
 # Extension Suspender Makefile
 
-.PHONY: build test clean
+.PHONY: build test clean status help
 
-# Build the extension (currently just a placeholder since it's all JS)
+# Build the extension (show installation instructions)
 build:
 	@echo "Extension is ready to load in Chrome"
 	@echo "1. Open chrome://extensions/"
