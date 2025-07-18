@@ -6,17 +6,10 @@
   "permissions": [
     "tabs",
     "storage",
-    "scripting",
     "activeTab",
     "webNavigation"
   ],
-  "content_scripts": [
-    {
-      "matches": ["*://*/*"],
-      "js": ["content.js"],
-      "run_at": "document_start"
-    }
-  ],
+
   "host_permissions": ["*://*/*"],
   "action": {
     "default_icon": "icon.svg"

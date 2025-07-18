@@ -147,44 +147,8 @@ async function suspendTab(tabId) {
     await saveSuspendedTabs();
     console.log(`Stored original URL for tab ${tabId}`);
 
-    // Step 1: Inject content script
-    await new Promise((resolve, reject) => {
-      browser.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['content.js']
-      }, () => {
-        if (chrome.runtime.lastError) {
-          console.warn('Content script injection failed:', chrome.runtime.lastError.message);
-          // Continue anyway, as suspension can still work without background task stopping
-          resolve();
-        } else {
-          console.log(`Content script injected for tab ${tabId}`);
-          resolve();
-        }
-      });
-    });
-
-    // Step 2: Send message to stop background tasks with timeout
-    try {
-      await Promise.race([
-        new Promise((resolve, reject) => {
-          browser.tabs.sendMessage(tabId, { action: 'stopBackgroundTasks' }, (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve(response);
-            }
-          });
-        }),
-        new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Message timeout')), 2000);
-        })
-      ]);
-      console.log(`Background tasks stopped for tab ${tabId}`);
-    } catch (error) {
-      console.warn(`Could not stop background tasks for tab ${tabId}:`, error.message);
-      // Continue with suspension even if background task stopping fails
-    }
+    // Note: Content script injection is not needed since page navigation to about:blank
+    // automatically terminates all background tasks, timers, and animation frames
 
     // Step 3: Navigate to suspended URL
     console.log(`Navigating tab ${tabId} to suspended URL: ${suspendedUrl}`);
@@ -240,7 +204,6 @@ function resetActivityTimer(tabId) {
   const existingTimer = tabActivityTimers.get(tabId);
   if (existingTimer) {
     clearTimeout(existingTimer);
-    console.log(`Cleared existing timer for tab ${tabId}`);
   }
 
   // Set new timer
@@ -256,7 +219,6 @@ function resetActivityTimer(tabId) {
   }, settings.inactivityTimeout);
 
   tabActivityTimers.set(tabId, timer);
-  console.log(`Set inactivity timer for tab ${tabId} (${settings.inactivityTimeout / 1000}s timeout)`);
 }
 
 function clearActivityTimer(tabId) {
@@ -270,8 +232,6 @@ function clearActivityTimer(tabId) {
 // Event listeners with improved error handling
 browser.tabs.onActivated.addListener(async (activeInfo) => {
   try {
-    console.log(`Tab ${activeInfo.tabId} became active`);
-
     // Clear timer for newly active tab
     clearActivityTimer(activeInfo.tabId);
 
@@ -304,7 +264,6 @@ browser.tabs.onActivated.addListener(async (activeInfo) => {
 
     for (const tab of allTabs) {
       if (tab.id !== activeInfo.tabId && shouldSuspendTab(tab)) {
-        console.log(`Starting inactivity timer for inactive tab ${tab.id} (${tab.url})`);
         resetActivityTimer(tab.id);
       }
     }
@@ -338,7 +297,6 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
       const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
       if (!isActive) {
-        console.log(`Starting inactivity timer for tab ${tabId} (${tab.url})`);
         resetActivityTimer(tabId);
       }
     }
@@ -532,21 +490,31 @@ browser.runtime.onSuspend.addListener(() => {
   cleanup();
 });
 
-// Periodic cleanup to prevent memory leaks
+// Periodic cleanup to prevent memory leaks (reduced frequency)
 setInterval(() => {
   try {
-    // Clean up any orphaned timers
-    const currentTabs = Array.from(tabActivityTimers.keys());
-    browser.tabs.query({}, (tabs) => {
-      const existingTabIds = tabs.map(tab => tab.id);
-      for (const tabId of currentTabs) {
-        if (!existingTabIds.includes(tabId)) {
-          clearActivityTimer(tabId);
-          suspendedTabs.delete(tabId);
+    // Only run cleanup if there are active timers
+    if (tabActivityTimers.size > 0) {
+      const currentTabs = Array.from(tabActivityTimers.keys());
+      browser.tabs.query({}, (tabs) => {
+        const existingTabIds = tabs.map(tab => tab.id);
+        let cleanedCount = 0;
+        for (const tabId of currentTabs) {
+          if (!existingTabIds.includes(tabId)) {
+            clearActivityTimer(tabId);
+            suspendedTabs.delete(tabId);
+            cleanedCount++;
+
+            console.log(`Suspended tab ${tabId} (${suspendedTabs.get(tabId)})`);
+
+          }
         }
-      }
-    });
+        if (cleanedCount > 0) {
+          console.log(`Cleaned up ${cleanedCount} orphaned timers`);
+        }
+      });
+    }
   } catch (error) {
     console.error('Error during periodic cleanup:', error);
   }
-}, 60000); // Run every minute
+}, 300000); // Run every 5 minutes instead of every minute
