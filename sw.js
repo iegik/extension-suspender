@@ -254,9 +254,10 @@ browser.tabs.onActivated.addListener(async (activeInfo) => {
       await restoreTab(activeInfo.tabId);
     }
 
-    // Start timers for all other tabs that should be suspended
-    const allTabs = await new Promise((resolve, reject) => {
-      browser.tabs.query({}, (tabs) => {
+    // Start timers for other tabs that should be suspended
+    // Only query tabs that are not active to avoid unnecessary work
+    const inactiveTabs = await new Promise((resolve, reject) => {
+      browser.tabs.query({ active: false }, (tabs) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
@@ -265,8 +266,8 @@ browser.tabs.onActivated.addListener(async (activeInfo) => {
       });
     });
 
-    for (const tab of allTabs) {
-      if (tab.id !== activeInfo.tabId && shouldSuspendTab(tab)) {
+    for (const tab of inactiveTabs) {
+      if (shouldSuspendTab(tab)) {
         resetActivityTimer(tab.id);
       }
     }
@@ -346,28 +347,15 @@ browser.storage.onChanged.addListener(async (changes) => {
       console.log('Timeout changed to:', changes.inactivityTimeout.newValue / 1000, 'seconds');
       settings.inactivityTimeout = changes.inactivityTimeout.newValue;
 
-      // Reset all timers with new timeout
-      const currentTabs = await new Promise((resolve, reject) => {
-        browser.tabs.query({}, (tabs) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(tabs);
-          }
-        });
-      });
-
-      console.log('Found', currentTabs.length, 'tabs');
-
       // Clear all existing timers
       for (const [tabId, timer] of tabActivityTimers) {
         clearTimeout(timer);
         tabActivityTimers.delete(tabId);
       }
 
-      // Reset timers for non-active tabs
-      const activeTabs = await new Promise((resolve, reject) => {
-        browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      // Reset timers for inactive tabs only
+      const inactiveTabs = await new Promise((resolve, reject) => {
+        browser.tabs.query({ active: false }, (tabs) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
           } else {
@@ -376,14 +364,9 @@ browser.storage.onChanged.addListener(async (changes) => {
         });
       });
 
-      console.log('Active tabs:', activeTabs.map(t => t.id));
-
-      for (const tab of currentTabs) {
-        if (shouldSuspendTab(tab) && !activeTabs.some(activeTab => activeTab.id === tab.id)) {
-          console.log('Starting timer for tab:', tab.id, tab.url);
+      for (const tab of inactiveTabs) {
+        if (shouldSuspendTab(tab)) {
           resetActivityTimer(tab.id);
-        } else {
-          console.log('Not starting timer for tab:', tab.id, 'shouldSuspendTab:', shouldSuspendTab(tab), 'isActive:', activeTabs.some(activeTab => activeTab.id === tab.id));
         }
       }
     }
@@ -422,13 +405,14 @@ browser.action.onClicked.addListener(async (tab) => {
   }
 });
 
-// Initialize: Set up timers for existing tabs after settings are loaded
+// Initialize: Set up timers for existing inactive tabs after settings are loaded
 async function initializeTimers() {
   try {
-    console.log('Initializing timers for existing tabs...');
+    console.log('Initializing timers for inactive tabs...');
 
-    const allTabs = await new Promise((resolve, reject) => {
-      browser.tabs.query({}, (tabs) => {
+    // Only query inactive tabs to minimize work
+    const inactiveTabs = await new Promise((resolve, reject) => {
+      browser.tabs.query({ active: false }, (tabs) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
@@ -437,29 +421,11 @@ async function initializeTimers() {
       });
     });
 
-    const activeTabs = await new Promise((resolve, reject) => {
-      browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(tabs);
-        }
-      });
-    });
+    console.log(`Found ${inactiveTabs.length} inactive tabs`);
 
-    console.log(`Found ${allTabs.length} total tabs, ${activeTabs.length} active tabs`);
-
-    for (const tab of allTabs) {
+    for (const tab of inactiveTabs) {
       if (shouldSuspendTab(tab)) {
-        const isActive = activeTabs.some(activeTab => activeTab.id === tab.id);
-        if (!isActive) {
-          console.log(`Initializing timer for inactive tab ${tab.id} (${tab.url})`);
-          resetActivityTimer(tab.id);
-        } else {
-          console.log(`Skipping timer for active tab ${tab.id} (${tab.url})`);
-        }
-      } else {
-        console.log(`Skipping timer for tab ${tab.id} (${tab.url}) - should not suspend`);
+        resetActivityTimer(tab.id);
       }
     }
   } catch (error) {
@@ -490,31 +456,6 @@ browser.runtime.onSuspend.addListener(() => {
   cleanup();
 });
 
-// Periodic cleanup to prevent memory leaks (reduced frequency)
-setInterval(() => {
-  try {
-    // Only run cleanup if there are active timers
-    if (tabActivityTimers.size > 0) {
-      const currentTabs = Array.from(tabActivityTimers.keys());
-      browser.tabs.query({}, (tabs) => {
-        const existingTabIds = tabs.map(tab => tab.id);
-        let cleanedCount = 0;
-        for (const tabId of currentTabs) {
-          if (!existingTabIds.includes(tabId)) {
-            clearActivityTimer(tabId);
-            suspendedTabs.delete(tabId);
-            cleanedCount++;
-
-            console.log(`Suspended tab ${tabId} (${suspendedTabs.get(tabId)})`);
-
-          }
-        }
-        if (cleanedCount > 0) {
-          console.log(`Cleaned up ${cleanedCount} orphaned timers`);
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Error during periodic cleanup:', error);
-  }
-}, 300000); // Run every 5 minutes instead of every minute
+// Note: Removed setInterval for periodic cleanup to prevent battery drain
+// Garbage collection will handle cleanup automatically
+// Orphaned timers will be cleaned up when tabs are removed via onRemoved event
