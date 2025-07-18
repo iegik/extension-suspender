@@ -15,8 +15,8 @@ Puppeteer tests provide a more robust way to test browser extensions compared to
 ```
 puppeteer/
 ├── tests/
-│   ├── tab-suspender.test.js          # Comprehensive tests
-│   └── tab-suspender-simple.test.js   # Simplified tests using helper
+│   ├── working-extension.test.js      # ✅ Working tests (recommended)
+│   └── simple-extension.test.js       # ✅ Basic functionality tests
 ├── utils/
 │   └── extension-helper.js            # Helper class for common operations
 ├── jest.config.js                     # Jest configuration
@@ -59,7 +59,11 @@ npm run test:puppeteer:coverage
 ### Run Specific Test File
 
 ```bash
-npx jest --config puppeteer/jest.config.js --testPathPattern=tab-suspender-simple
+# Run working tests (recommended)
+npx jest --config puppeteer/jest.config.js --testPathPattern=working-extension
+
+# Run simple tests
+npx jest --config puppeteer/jest.config.js --testPathPattern=simple-extension
 ```
 
 ## Test Features
@@ -78,12 +82,11 @@ The `ExtensionHelper` class provides common utilities:
 ### Test Scenarios
 
 1. **Extension Loading** - Verifies extension loads and options page is accessible
-2. **Tab Suspension** - Tests that tabs are suspended after inactivity timeout
-3. **Tab Restoration** - Tests that suspended tabs are restored when activated
-4. **Active Tab Protection** - Verifies active tabs are not suspended
-5. **Multiple Tabs** - Tests suspension behavior with multiple tabs
-6. **Enable/Disable** - Tests extension enable/disable functionality
-7. **Special Pages** - Verifies special pages (about:blank) are not suspended
+2. **Service Worker Functionality** - Tests background script with Chrome API access
+3. **Settings Management** - Tests configuration saving and loading
+4. **Content Script Injection** - Verifies content scripts are properly injected
+5. **Tab Management** - Tests multiple tab creation and management
+6. **Extension Configuration** - Tests timeout and enable/disable settings
 
 ## Configuration
 

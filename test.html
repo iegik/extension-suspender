@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tab Suspension Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .active {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .inactive {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .timer {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            color: #007bff;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .instructions {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tab Suspension Test</h1>
+
+        <div class="instructions">
+            <h3>How to test:</h3>
+            <ol>
+                <li>Open this page in a new tab</li>
+                <li>Switch to another tab or window</li>
+                <li>Wait for the inactivity timeout (default: 5 minutes)</li>
+                <li>The tab should be suspended (URL will change to about:blank#original-url)</li>
+                <li>Switch back to this tab to restore it</li>
+            </ol>
+        </div>
+
+        <div id="status" class="status active">
+            Tab is currently ACTIVE
+        </div>
+
+        <div class="timer" id="timer">
+            Time since last activity: <span id="timeElapsed">0</span> seconds
+        </div>
+
+        <div>
+            <button onclick="simulateActivity()">Simulate Activity</button>
+            <button onclick="checkUrl()">Check Current URL</button>
+            <button onclick="showTabInfo()">Show Tab Info</button>
+        </div>
+
+        <div id="info" style="margin-top: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+            <h4>Debug Information:</h4>
+            <div id="debugInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        let lastActivity = Date.now();
+        let timerInterval;
+
+        function updateTimer() {
+            const elapsed = Math.floor((Date.now() - lastActivity) / 1000);
+            document.getElementById('timeElapsed').textContent = elapsed;
+
+            // Update status based on visibility
+            if (document.hidden) {
+                document.getElementById('status').className = 'status inactive';
+                document.getElementById('status').textContent = 'Tab is INACTIVE (hidden)';
+            } else {
+                document.getElementById('status').className = 'status active';
+                document.getElementById('status').textContent = 'Tab is ACTIVE (visible)';
+            }
+        }
+
+        function simulateActivity() {
+            lastActivity = Date.now();
+            updateTimer();
+            console.log('Activity simulated at:', new Date().toISOString());
+        }
+
+        function checkUrl() {
+            const currentUrl = window.location.href;
+            console.log('Current URL:', currentUrl);
+            alert('Current URL: ' + currentUrl);
+        }
+
+        function showTabInfo() {
+            const info = {
+                url: window.location.href,
+                title: document.title,
+                hidden: document.hidden,
+                visibilityState: document.visibilityState,
+                lastActivity: new Date(lastActivity).toISOString(),
+                timeSinceActivity: Math.floor((Date.now() - lastActivity) / 1000) + ' seconds'
+            };
+
+            document.getElementById('debugInfo').innerHTML =
+                '<pre>' + JSON.stringify(info, null, 2) + '</pre>';
+        }
+
+        // Track activity
+        ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(event => {
+            document.addEventListener(event, simulateActivity, true);
+        });
+
+        // Track visibility changes
+        document.addEventListener('visibilitychange', () => {
+            console.log('Visibility changed:', document.visibilityState);
+            updateTimer();
+        });
+
+        // Track focus changes
+        window.addEventListener('focus', () => {
+            console.log('Window focused');
+            simulateActivity();
+        });
+
+        window.addEventListener('blur', () => {
+            console.log('Window blurred');
+        });
+
+        // Start timer
+        timerInterval = setInterval(updateTimer, 1000);
+        updateTimer();
+
+        // Initial debug info
+        showTabInfo();
+    </script>
+</body>
+</html>
