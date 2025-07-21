@@ -6,7 +6,7 @@ const SUSPENDED_URL_PREFIX = 'about:blank#';
 const minutes = 60 * 1000;
 
 // State management with persistence
-let suspendedTabs = new Map(); // tabId -> originalUrl
+let suspendedTabs = new Set(); // Set of suspended tabIds
 let tabActivityTimers = new Map(); // tabId -> timer
 const defaultSettings = Object.freeze({
   inactivityTimeout: 1 * minutes, // 1 minute
@@ -37,19 +37,18 @@ async function loadPersistedState() {
       settings.enabled = result.enabled;
     }
     if (result.suspendedTabs) {
-      suspendedTabs = new Map(Object.entries(result.suspendedTabs));
+      suspendedTabs = new Set(result.suspendedTabs);
     }
   } catch (error) {
-    console.error('Error loading persisted state:', error);
+    console.debug('Error loading persisted state:', error);
   }
 }
 
 // Save suspended tabs to storage
 async function saveSuspendedTabs() {
   try {
-    const suspendedTabsObject = Object.fromEntries(suspendedTabs);
     await new Promise((resolve, reject) => {
-      browser.storage.local.set({ suspendedTabs: suspendedTabsObject }, () => {
+      browser.storage.local.set({ suspendedTabs: Array.from(suspendedTabs) }, () => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
@@ -58,7 +57,7 @@ async function saveSuspendedTabs() {
       });
     });
   } catch (error) {
-    console.error('Error saving suspended tabs:', error);
+    console.debug('Error saving suspended tabs:', error);
   }
 }
 
@@ -121,7 +120,7 @@ function shouldSuspendTab(tab) {
 // Improved suspendTab function with proper async handling
 async function suspendTab(tabId) {
   try {
-    console.log(`Starting suspension process for tab ${tabId}...`);
+    console.debug(`Starting suspension process for tab ${tabId}...`);
 
     // Get tab information
     const tab = await new Promise((resolve, reject) => {
@@ -134,28 +133,20 @@ async function suspendTab(tabId) {
       });
     });
 
-    console.log(`Tab ${tabId} info:`, { url: tab.url, active: tab.active, status: tab.status });
-
     if (!shouldSuspendTab(tab)) {
-      console.log(`Tab ${tabId} should not be suspended (URL: ${tab.url})`);
+      console.debug(`Tab ${tabId} should not be suspended.`);
       return;
     }
 
-    const originalUrl = tab.url;
-    const suspendedUrl = createSuspendedUrl(originalUrl);
+    const suspendedUrl = createSuspendedUrl(tab.url);
 
-    console.log(`Suspending tab ${tabId}: ${originalUrl} -> ${suspendedUrl}`);
-
-    // Store original URL
-    suspendedTabs.set(tabId, originalUrl);
+    // Store tabId only
+    suspendedTabs.add(tabId);
     await saveSuspendedTabs();
-    console.log(`Stored original URL for tab ${tabId}`);
-
-    // Note: Content script injection is not needed since page navigation to about:blank
-    // automatically terminates all background tasks, timers, and animation frames
+    console.debug(`Stored suspended tabId ${tabId}`);
 
     // Step 3: Navigate to suspended URL
-    console.log(`Navigating tab ${tabId} to suspended URL: ${suspendedUrl}`);
+    console.debug(`Navigating tab ${tabId} to suspended URL.`);
     await new Promise((resolve, reject) => {
       browser.tabs.update(tabId, { url: suspendedUrl }, () => {
         if (chrome.runtime.lastError) {
@@ -166,9 +157,9 @@ async function suspendTab(tabId) {
       });
     });
 
-    console.log(`Successfully suspended tab ${tabId}: ${originalUrl} -> ${suspendedUrl}`);
+    console.debug(`Successfully suspended tab ${tabId}`);
   } catch (error) {
-    console.error(`Failed to suspend tab ${tabId}:`, error.message);
+    console.debug(`Failed to suspend tab ${tabId}:`, error.message);
     // Clean up state on failure
     suspendedTabs.delete(tabId);
     clearActivityTimer(tabId);
@@ -179,11 +170,22 @@ async function suspendTab(tabId) {
 // Improved restoreTab function with proper async handling
 async function restoreTab(tabId) {
   try {
-    const originalUrl = suspendedTabs.get(tabId);
-    if (!originalUrl) {
-      console.log(`No original URL found for tab ${tabId}`);
+    if (!suspendedTabs.has(tabId)) {
+      console.debug(`No suspended tab found for tabId ${tabId}`);
       return;
     }
+
+    // Get tab info to restore original URL
+    const tab = await new Promise((resolve, reject) => {
+      browser.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(tab);
+        }
+      });
+    });
+    const originalUrl = getOriginalUrl(tab.url);
 
     await new Promise((resolve, reject) => {
       browser.tabs.update(tabId, { url: originalUrl }, () => {
@@ -197,9 +199,9 @@ async function restoreTab(tabId) {
 
     suspendedTabs.delete(tabId);
     await saveSuspendedTabs();
-    console.log(`Successfully restored tab ${tabId}: ${originalUrl}`);
+    console.debug(`Successfully restored tab ${tabId}`);
   } catch (error) {
-    console.error(`Failed to restore tab ${tabId}:`, error.message);
+    console.debug(`Failed to restore tab ${tabId}:`, error.message);
   }
 }
 
@@ -243,7 +245,7 @@ async function areAllTabsSuspended() {
       else resolve(tabs);
     });
   });
-  return tabs.every(tab => isSuspendedUrl(tab.url));
+  return tabs.every(tab => suspendedTabs.has(tab.id));
 }
 
 // Helper: Clear all timers and remove listeners
@@ -270,13 +272,7 @@ function clearAllTimersAndListeners() {
 async function onTabActivated(activeInfo) {
   try {
     clearActivityTimer(activeInfo.tabId);
-    const tab = await new Promise((resolve, reject) => {
-      browser.tabs.get(activeInfo.tabId, (tab) => {
-        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-        else resolve(tab);
-      });
-    });
-    if (isSuspendedUrl(tab.url)) {
+    if (suspendedTabs.has(activeInfo.tabId)) {
       await restoreTab(activeInfo.tabId);
     }
     // Set timers for all inactive tabs
@@ -298,7 +294,7 @@ async function onTabActivated(activeInfo) {
 
 async function onTabUpdated(tabId, changeInfo, tab) {
   try {
-    if (changeInfo.url && isSuspendedUrl(changeInfo.url)) {
+    if (suspendedTabs.has(tabId) && changeInfo.url && isSuspendedUrl(changeInfo.url)) {
       const activeTabs = await new Promise((resolve, reject) => {
         browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -331,7 +327,7 @@ async function onTabUpdated(tabId, changeInfo, tab) {
 
 async function onBeforeNavigate(details) {
   try {
-    if (isSuspendedUrl(details.url)) {
+    if (suspendedTabs.has(details.tabId) && isSuspendedUrl(details.url)) {
       const activeTabs = await new Promise((resolve, reject) => {
         browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -405,11 +401,11 @@ browser.storage.onChanged.addListener(async (changes) => {
 
       // If disabled, restore all suspended tabs
       if (!settings.enabled) {
-        for (const [tabId, originalUrl] of suspendedTabs) {
+        for (const tabId of suspendedTabs) {
           try {
             await restoreTab(tabId);
           } catch (error) {
-            console.error(`Failed to restore tab ${tabId} when disabling:`, error.message);
+            console.debug(`Failed to restore tab ${tabId} when disabling:`, error.message);
           }
         }
       }
@@ -449,7 +445,7 @@ async function initializeTimers() {
       });
     });
 
-    console.log(`Found ${inactiveTabs.length} inactive tabs`);
+    console.debug(`Found ${inactiveTabs.length} inactive tabs`);
 
     for (const tab of inactiveTabs) {
       if (shouldSuspendTab(tab)) {
@@ -463,7 +459,7 @@ async function initializeTimers() {
 
 // Initialize after settings are loaded
 loadPersistedState().then(() => {
-  console.log('Settings loaded, initializing timers...');
+  console.debug('Settings loaded, initializing timers...');
   initializeTimers();
 });
 
