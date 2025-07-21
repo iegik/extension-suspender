@@ -100,30 +100,19 @@ function createSuspendedUrl(originalUrl) {
 }
 
 function shouldSuspendTab(tab) {
-  // Don't suspend if extension is disabled
   if (!settings.enabled) return false;
-
-  // Don't suspend special pages
   if (tab.url.startsWith('chrome://') ||
       tab.url.startsWith('moz-extension://') ||
       tab.url.startsWith('about:') ||
       tab.url.startsWith('data:') ||
-      tab.url.startsWith('file://')) {
-    return false;
-  }
-
-  // Don't suspend if already suspended
+      tab.url.startsWith('file://')) return false;
   if (isSuspendedUrl(tab.url)) return false;
-
   return true;
 }
 
-// Improved suspendTab function with proper async handling
 async function suspendTab(tabId) {
   try {
-    console.debug(`Starting suspension process for tab ${tabId}...`);
-
-    // Get tab information
+    if (suspendedTabs.has(tabId)) return;
     const tab = await new Promise((resolve, reject) => {
       browser.tabs.get(tabId, (tab) => {
         if (chrome.runtime.lastError) {
@@ -133,21 +122,10 @@ async function suspendTab(tabId) {
         }
       });
     });
-
-    if (!shouldSuspendTab(tab)) {
-      console.debug(`Tab ${tabId} should not be suspended.`);
-      return;
-    }
-
+    if (!shouldSuspendTab(tab)) return;
     const suspendedUrl = createSuspendedUrl(tab.url);
-
-    // Store tabId only
     suspendedTabs.add(tabId);
     await saveSuspendedTabs();
-    console.debug(`Stored suspended tabId ${tabId}`);
-
-    // Step 3: Navigate to suspended URL
-    console.debug(`Navigating tab ${tabId} to suspended URL.`);
     await new Promise((resolve, reject) => {
       browser.tabs.update(tabId, { url: suspendedUrl }, () => {
         if (chrome.runtime.lastError) {
@@ -157,26 +135,16 @@ async function suspendTab(tabId) {
         }
       });
     });
-
-    console.debug(`Successfully suspended tab ${tabId}`);
   } catch (error) {
-    console.debug(`Failed to suspend tab ${tabId}:`, error.message);
-    // Clean up state on failure
     suspendedTabs.delete(tabId);
     clearActivityTimer(tabId);
     await saveSuspendedTabs();
   }
 }
 
-// Improved restoreTab function with proper async handling
 async function restoreTab(tabId) {
   try {
-    if (!suspendedTabs.has(tabId)) {
-      console.debug(`No suspended tab found for tabId ${tabId}`);
-      return;
-    }
-
-    // Get tab info to restore original URL
+    if (!suspendedTabs.has(tabId)) return;
     const tab = await new Promise((resolve, reject) => {
       browser.tabs.get(tabId, (tab) => {
         if (chrome.runtime.lastError) {
@@ -187,7 +155,6 @@ async function restoreTab(tabId) {
       });
     });
     const originalUrl = getOriginalUrl(tab.url);
-
     await new Promise((resolve, reject) => {
       browser.tabs.update(tabId, { url: originalUrl }, () => {
         if (chrome.runtime.lastError) {
@@ -197,30 +164,20 @@ async function restoreTab(tabId) {
         }
       });
     });
-
     suspendedTabs.delete(tabId);
     await saveSuspendedTabs();
-    console.debug(`Successfully restored tab ${tabId}`);
-  } catch (error) {
-    console.debug(`Failed to restore tab ${tabId}:`, error.message);
-  }
+  } catch (error) {}
 }
 
 function resetActivityTimer(tabId) {
-  // Only set a timer if not already suspended
   if (suspendedTabs.has(tabId)) return;
-  // Clear existing timer
   const existingTimer = tabActivityTimers.get(tabId);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-  }
-  // Set new timer
+  if (existingTimer) clearTimeout(existingTimer);
   const timer = setTimeout(async () => {
     try {
       await suspendTab(tabId);
-    } catch (error) {
-      console.debug(`Timer-based suspension failed for tab ${tabId}:`, error.message);
-    } finally {
+    } catch (error) {}
+    finally {
       tabActivityTimers.delete(tabId);
     }
   }, settings.inactivityTimeout);
@@ -229,10 +186,9 @@ function resetActivityTimer(tabId) {
 
 function clearActivityTimer(tabId) {
   const timer = tabActivityTimers.get(tabId);
-  if (timer) {
-    clearTimeout(timer);
-    tabActivityTimers.delete(tabId);
-  }
+  if (!timer) return;
+  clearTimeout(timer);
+  tabActivityTimers.delete(tabId);
 }
 
 // Helper: Check if all tabs are suspended
@@ -266,14 +222,12 @@ function clearAllTimersAndListeners() {
   }
 }
 
-// Store references to listeners so we can remove them
 async function onTabActivated(activeInfo) {
   try {
     clearActivityTimer(activeInfo.tabId);
     if (suspendedTabs.has(activeInfo.tabId)) {
       await restoreTab(activeInfo.tabId);
     }
-    // Set timers for all inactive, eligible, non-suspended tabs
     const inactiveTabs = await new Promise((resolve, reject) => {
       browser.tabs.query({ active: false }, (tabs) => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -281,15 +235,13 @@ async function onTabActivated(activeInfo) {
       });
     });
     for (const tab of inactiveTabs) {
-      if (shouldSuspendTab(tab) && !suspendedTabs.has(tab.id)) {
-        resetActivityTimer(tab.id);
-      } else {
+      if (!shouldSuspendTab(tab) || suspendedTabs.has(tab.id)) {
         clearActivityTimer(tab.id);
+        continue;
       }
+      resetActivityTimer(tab.id);
     }
-  } catch (error) {
-    console.error('Error handling tab activation:', error.message);
-  }
+  } catch (error) {}
 }
 
 async function onTabUpdated(tabId, changeInfo, tab) {
@@ -302,31 +254,24 @@ async function onTabUpdated(tabId, changeInfo, tab) {
         });
       });
       const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
-      if (isActive) {
-        await restoreTab(tabId);
-      }
+      if (isActive) await restoreTab(tabId);
       return;
     }
     if (!changeInfo.url || changeInfo.status !== 'complete') return;
-    if (shouldSuspendTab(tab) && !suspendedTabs.has(tabId)) {
-      const activeTabs = await new Promise((resolve, reject) => {
-        browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-          else resolve(tabs);
-        });
-      });
-      const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
-      if (!isActive) {
-        resetActivityTimer(tabId);
-      } else {
-        clearActivityTimer(tabId);
-      }
-    } else {
+    if (!shouldSuspendTab(tab) || suspendedTabs.has(tabId)) {
       clearActivityTimer(tabId);
+      return;
     }
-  } catch (error) {
-    console.error('Error handling tab update:', error.message);
-  }
+    const activeTabs = await new Promise((resolve, reject) => {
+      browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(tabs);
+      });
+    });
+    const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
+    if (!isActive) resetActivityTimer(tabId);
+    else clearActivityTimer(tabId);
+  } catch (error) {}
 }
 
 async function onBeforeNavigate(details) {
@@ -446,15 +391,13 @@ async function initializeTimers() {
       });
     });
     for (const tab of inactiveTabs) {
-      if (shouldSuspendTab(tab) && !suspendedTabs.has(tab.id)) {
-        resetActivityTimer(tab.id);
-      } else {
+      if (!shouldSuspendTab(tab) || suspendedTabs.has(tab.id)) {
         clearActivityTimer(tab.id);
+        continue;
       }
+      resetActivityTimer(tab.id);
     }
-  } catch (error) {
-    console.error('Error initializing timers:', error.message);
-  }
+  } catch (error) {}
 }
 
 // Initialize after settings are loaded
