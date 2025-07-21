@@ -5,6 +5,7 @@ module.exports = defineConfig({
     setupNodeEvents(on, config) {
       // implement node event listeners here
       on('before:browser:launch', (browser = {}, launchOptions) => {
+        // Load the extension
         launchOptions.extensions.push(__dirname)
 
         return launchOptions
@@ -12,7 +13,7 @@ module.exports = defineConfig({
     },
     baseUrl: 'https://example.com/',
     supportFile: 'cypress/support/e2e.js',
-    specPattern: 'cypress/e2e/**/*.cy.js',
+    specPattern: 'test/cypress-entry.js', // Use unified entry point
     viewportWidth: 1280,
     viewportHeight: 720,
     video: false,

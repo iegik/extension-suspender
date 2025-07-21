@@ -1,8 +1,9 @@
 module.exports = {
   testEnvironment: 'node',
-  rootDir: '..', // Set root directory to parent (project root)
-  testMatch: ['test/puppeteer-entry.test.js'], // Use unified entry point from root
-  setupFilesAfterEnv: ['<rootDir>/puppeteer/setup.js'], // Update setup file path
+  testMatch: [
+    "**/__tests__/**/*.?([mc])[jt]s?(x)",
+    "**/?(*.)+(spec|test).?([mc])[jt]s?(x)"
+  ],
   testTimeout: 30000, // 30 seconds timeout for each test
   verbose: true,
   collectCoverage: false,

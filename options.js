@@ -6,18 +6,19 @@ const enabledCheckbox = document.getElementById('enabled');
 const timeoutInput = document.getElementById('timeout');
 const saveButton = document.getElementById('save');
 const statusSpan = document.getElementById('status');
+const minutes = 60 * 1000;
 
 // Load current settings
 browser.storage.local.get(['enabled', 'inactivityTimeout'], (result) => {
   enabledCheckbox.checked = result.enabled !== false; // Default to true
-  timeoutInput.value = Math.max(1, Math.min(60, (result.inactivityTimeout || 1 * 60 * 1000) / (60 * 1000)));
+  timeoutInput.value = Math.max(1, Math.min(60, (result.inactivityTimeout || 1 * minutes) / (minutes)));
 });
 
 // Save settings
 function saveSettings() {
   const enabled = enabledCheckbox.checked;
   const timeoutMinutes = parseInt(timeoutInput.value);
-  const timeoutMs = timeoutMinutes * 60 * 1000;
+  const timeoutMs = timeoutMinutes * minutes;
 
   browser.storage.local.set({
     enabled: enabled,

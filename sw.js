@@ -3,12 +3,13 @@ if (typeof chrome !== 'undefined') browser = chrome;
 
 // Configuration
 const SUSPENDED_URL_PREFIX = 'about:blank#';
+const minutes = 60 * 1000;
 
 // State management with persistence
 let suspendedTabs = new Map(); // tabId -> originalUrl
 let tabActivityTimers = new Map(); // tabId -> timer
 const defaultSettings = Object.freeze({
-  inactivityTimeout: 1 * 60 * 1000, // 1 minute
+  inactivityTimeout: 1 * minutes, // 1 minute
   enabled: true
 });
 
@@ -221,6 +222,8 @@ function resetActivityTimer(tabId) {
     }
   }, settings.inactivityTimeout);
 
+  console.log(`Timer set up for inactive tab ${tabId}`);
+
   tabActivityTimers.set(tabId, timer);
 }
 
@@ -232,40 +235,57 @@ function clearActivityTimer(tabId) {
   }
 }
 
-// Event listeners with improved error handling
-browser.tabs.onActivated.addListener(async (activeInfo) => {
-  try {
-    // Clear timer for newly active tab
-    clearActivityTimer(activeInfo.tabId);
+// Helper: Check if all tabs are suspended
+async function areAllTabsSuspended() {
+  const tabs = await new Promise((resolve, reject) => {
+    browser.tabs.query({}, (tabs) => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve(tabs);
+    });
+  });
+  return tabs.every(tab => isSuspendedUrl(tab.url));
+}
 
-    // Restore if suspended
+// Helper: Clear all timers and remove listeners
+function clearAllTimersAndListeners() {
+  // Clear all timers
+  for (const [tabId, timer] of tabActivityTimers) {
+    clearTimeout(timer);
+  }
+  tabActivityTimers.clear();
+
+  // Remove event listeners
+  if (browser.tabs.onActivated.hasListener(onTabActivated)) {
+    browser.tabs.onActivated.removeListener(onTabActivated);
+  }
+  if (browser.tabs.onUpdated.hasListener(onTabUpdated)) {
+    browser.tabs.onUpdated.removeListener(onTabUpdated);
+  }
+  if (browser.webNavigation.onBeforeNavigate.hasListener(onBeforeNavigate)) {
+    browser.webNavigation.onBeforeNavigate.removeListener(onBeforeNavigate);
+  }
+}
+
+// Store references to listeners so we can remove them
+async function onTabActivated(activeInfo) {
+  try {
+    clearActivityTimer(activeInfo.tabId);
     const tab = await new Promise((resolve, reject) => {
       browser.tabs.get(activeInfo.tabId, (tab) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(tab);
-        }
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(tab);
       });
     });
-
     if (isSuspendedUrl(tab.url)) {
-      console.log(`Restoring suspended tab ${activeInfo.tabId}`);
       await restoreTab(activeInfo.tabId);
     }
-
-    // Start timers for other tabs that should be suspended
-    // Only query tabs that are not active to avoid unnecessary work
+    // Set timers for all inactive tabs
     const inactiveTabs = await new Promise((resolve, reject) => {
       browser.tabs.query({ active: false }, (tabs) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(tabs);
-        }
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(tabs);
       });
     });
-
     for (const tab of inactiveTabs) {
       if (shouldSuspendTab(tab)) {
         resetActivityTimer(tab.id);
@@ -274,31 +294,31 @@ browser.tabs.onActivated.addListener(async (activeInfo) => {
   } catch (error) {
     console.error('Error handling tab activation:', error.message);
   }
-});
+}
 
-browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+async function onTabUpdated(tabId, changeInfo, tab) {
   try {
-    // If this is a suspended URL being loaded, restore it
     if (changeInfo.url && isSuspendedUrl(changeInfo.url)) {
-      await restoreTab(tabId);
+      const activeTabs = await new Promise((resolve, reject) => {
+        browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(tabs);
+        });
+      });
+      const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
+      if (isActive) {
+        await restoreTab(tabId);
+      }
       return;
     }
-
-    // Only process if URL changed and tab is complete
     if (!changeInfo.url || changeInfo.status !== 'complete') return;
-
-    // If this is a regular URL and tab is not active, start inactivity timer
     if (shouldSuspendTab(tab)) {
       const activeTabs = await new Promise((resolve, reject) => {
         browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(tabs);
-          }
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(tabs);
         });
       });
-
       const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
       if (!isActive) {
         resetActivityTimer(tabId);
@@ -307,38 +327,46 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   } catch (error) {
     console.error('Error handling tab update:', error.message);
   }
-});
+}
 
-browser.tabs.onRemoved.addListener(async (tabId) => {
+async function onBeforeNavigate(details) {
   try {
-    // Clean up timers and suspended tab data
-    clearActivityTimer(tabId);
-    suspendedTabs.delete(tabId);
-    await saveSuspendedTabs();
-  } catch (error) {
-    console.error('Error handling tab removal:', error.message);
-  }
-});
-
-browser.webNavigation.onBeforeNavigate.addListener(async (details) => {
-  try {
-    // If navigating to a suspended URL, restore the original URL
     if (isSuspendedUrl(details.url)) {
-      const originalUrl = getOriginalUrl(details.url);
-      await new Promise((resolve, reject) => {
-        browser.tabs.update(details.tabId, { url: originalUrl }, () => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve();
-          }
+      const activeTabs = await new Promise((resolve, reject) => {
+        browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(tabs);
         });
       });
+      const isActive = activeTabs.some(activeTab => activeTab.id === details.tabId);
+      if (isActive) {
+        const originalUrl = getOriginalUrl(details.url);
+        await new Promise((resolve, reject) => {
+          browser.tabs.update(details.tabId, { url: originalUrl }, () => {
+            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+            else resolve();
+          });
+        });
+      }
     }
   } catch (error) {
     console.error('Error handling navigation:', error.message);
   }
-});
+}
+
+// Register listeners
+browser.tabs.onActivated.addListener(onTabActivated);
+browser.tabs.onUpdated.addListener(onTabUpdated);
+browser.webNavigation.onBeforeNavigate.addListener(onBeforeNavigate);
+
+// Patch suspendTab to check if all tabs are suspended after each suspension
+const originalSuspendTab = suspendTab;
+suspendTab = async function(tabId) {
+  await originalSuspendTab.call(this, tabId);
+  if (await areAllTabsSuspended()) {
+    clearAllTimersAndListeners();
+  }
+};
 
 // Settings management
 browser.storage.onChanged.addListener(async (changes) => {
