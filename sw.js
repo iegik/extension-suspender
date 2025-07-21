@@ -7,6 +7,7 @@ const minutes = 60 * 1000;
 
 // State management with persistence
 let suspendedTabs = new Set(); // Set of suspended tabIds
+// Use a WeakMap for tabActivityTimers if possible (tabId is a number, so fallback to Map)
 let tabActivityTimers = new Map(); // tabId -> timer
 const defaultSettings = Object.freeze({
   inactivityTimeout: 1 * minutes, // 1 minute
@@ -206,26 +207,23 @@ async function restoreTab(tabId) {
 }
 
 function resetActivityTimer(tabId) {
+  // Only set a timer if not already suspended
+  if (suspendedTabs.has(tabId)) return;
   // Clear existing timer
   const existingTimer = tabActivityTimers.get(tabId);
   if (existingTimer) {
     clearTimeout(existingTimer);
   }
-
   // Set new timer
   const timer = setTimeout(async () => {
     try {
-      console.log(`Timer expired for tab ${tabId}, attempting suspension...`);
       await suspendTab(tabId);
     } catch (error) {
-      console.error(`Timer-based suspension failed for tab ${tabId}:`, error.message);
+      console.debug(`Timer-based suspension failed for tab ${tabId}:`, error.message);
     } finally {
       tabActivityTimers.delete(tabId);
     }
   }, settings.inactivityTimeout);
-
-  console.log(`Timer set up for inactive tab ${tabId}`);
-
   tabActivityTimers.set(tabId, timer);
 }
 
@@ -275,7 +273,7 @@ async function onTabActivated(activeInfo) {
     if (suspendedTabs.has(activeInfo.tabId)) {
       await restoreTab(activeInfo.tabId);
     }
-    // Set timers for all inactive tabs
+    // Set timers for all inactive, eligible, non-suspended tabs
     const inactiveTabs = await new Promise((resolve, reject) => {
       browser.tabs.query({ active: false }, (tabs) => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -283,8 +281,10 @@ async function onTabActivated(activeInfo) {
       });
     });
     for (const tab of inactiveTabs) {
-      if (shouldSuspendTab(tab)) {
+      if (shouldSuspendTab(tab) && !suspendedTabs.has(tab.id)) {
         resetActivityTimer(tab.id);
+      } else {
+        clearActivityTimer(tab.id);
       }
     }
   } catch (error) {
@@ -308,7 +308,7 @@ async function onTabUpdated(tabId, changeInfo, tab) {
       return;
     }
     if (!changeInfo.url || changeInfo.status !== 'complete') return;
-    if (shouldSuspendTab(tab)) {
+    if (shouldSuspendTab(tab) && !suspendedTabs.has(tabId)) {
       const activeTabs = await new Promise((resolve, reject) => {
         browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -318,7 +318,11 @@ async function onTabUpdated(tabId, changeInfo, tab) {
       const isActive = activeTabs.some(activeTab => activeTab.id === tabId);
       if (!isActive) {
         resetActivityTimer(tabId);
+      } else {
+        clearActivityTimer(tabId);
       }
+    } else {
+      clearActivityTimer(tabId);
     }
   } catch (error) {
     console.error('Error handling tab update:', error.message);
@@ -432,9 +436,6 @@ browser.action.onClicked.addListener(async (tab) => {
 // Initialize: Set up timers for existing inactive tabs after settings are loaded
 async function initializeTimers() {
   try {
-    console.log('Initializing timers for inactive tabs...');
-
-    // Only query inactive tabs to minimize work
     const inactiveTabs = await new Promise((resolve, reject) => {
       browser.tabs.query({ active: false }, (tabs) => {
         if (chrome.runtime.lastError) {
@@ -444,12 +445,11 @@ async function initializeTimers() {
         }
       });
     });
-
-    console.debug(`Found ${inactiveTabs.length} inactive tabs`);
-
     for (const tab of inactiveTabs) {
-      if (shouldSuspendTab(tab)) {
+      if (shouldSuspendTab(tab) && !suspendedTabs.has(tab.id)) {
         resetActivityTimer(tab.id);
+      } else {
+        clearActivityTimer(tab.id);
       }
     }
   } catch (error) {
