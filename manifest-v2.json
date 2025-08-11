@@ -10,9 +10,12 @@
     "webNavigation",
     "*://*/*"
   ],
-
   "page_action": {
-    "default_icon": "icon.svg"
+    "default_icon": "favicon.ico"
+  },
+  "icons": {
+    "128": "favicon-x1.svg",
+    "256": "favicon-x2.svg",
   },
   "background": {
     "scripts": ["sw.js"]

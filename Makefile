@@ -29,8 +29,25 @@ screenshots:
 	@optipng -o2 *.png
 	@echo "✓ Screenshots generated and optimized"
 
+export PATH := /Applications/Inkscape.app/Contents/MacOS:$(PATH)
+
 icon:
-	@magick convert -background white -resize 128x128 icon.svg icon.png
+	@echo "Making icons..." \
+	&& for i in 16 32 48 128 256 512; do \
+		src=favicon-x1.svg; \
+		[ $${i} -ge 256 ] && src=favicon-x2.svg; \
+		inkscape \
+			-w $${i} -h $${i} \
+			--export-type=png --export-filename=favicon-$${i}.png --export-dpi=200 \
+			--export-background-opacity=0 $$src; \
+	done \
+	&& magick favicon-*.png -background white -alpha remove favicon.ico \
+	&& echo "done"
+
+# 		magick convert \
+# 			-density 200 -transparent white -channel rgba -background white -antialias \
+# 			-resize $${i}x$${i} \
+# 			$$src favicon-$${i}.png; \
 
 # Help
 help:

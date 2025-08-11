@@ -7,12 +7,15 @@
     "tabs",
     "storage",
     "activeTab",
-    "webNavigation"
+    "webNavigation",
   ],
-
   "host_permissions": ["*://*/*"],
   "action": {
-    "default_icon": "icon.svg"
+    "default_icon": "favicon.ico"
+  },
+  "icons": {
+    "128": "favicon-x1.svg",
+    "256": "favicon-x2.svg",
   },
   "background": {
     "service_worker": "sw.js"
