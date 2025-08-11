@@ -365,7 +365,7 @@ browser.storage.onChanged.addListener(async (changes) => {
 });
 
 // Extension action click handler
-browser.action.onClicked.addListener(async (tab) => {
+browser.action.onClicked?.addListener(async (tab) => {
   try {
     // Toggle suspension for current tab
     if (isSuspendedUrl(tab.url)) {
