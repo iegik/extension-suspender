@@ -41,5 +41,8 @@
   },
   "dependencies": {
     "web-ext": "^8.9.0"
+  },
+  "overrides": {
+    "tmp": "0.2.5"
   }
 }
