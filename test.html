@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'nonce-abc123'; style-src 'self' 'nonce-abc123';">
     <title>Tab Suspension Test</title>
-    <style>
+    <style nonce="abc123">
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -96,7 +97,7 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="abc123">
         let lastActivity = Date.now();
         let timerInterval;
 
