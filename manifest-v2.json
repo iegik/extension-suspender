@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Tab Suspender",
   "description": "Suspends inactive tabs to save memory and CPU usage",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "permissions": [
     "tabs",
     "storage",
@@ -15,7 +15,7 @@
   },
   "icons": {
     "128": "favicon-x1.svg",
-    "256": "favicon-x2.svg",
+    "256": "favicon-x2.svg"
   },
   "background": {
     "scripts": ["sw.js"]
