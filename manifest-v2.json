@@ -10,6 +10,11 @@
     "webNavigation",
     "*://*/*"
   ],
+  "applications": {
+    "gecko": {
+      "id": "{0a6226a4-979c-411e-ae28-ce8993216a80}"
+    }
+  },
   "page_action": {
     "default_icon": "favicon.ico"
   },

@@ -7,9 +7,14 @@ firefox:
 chrome:
 	@rm manifest.json && ln -sf manifest-v3.json manifest.json
 
+build\:chrome:
+	@web-ext build -a build -n "`jq -r .name package.json`-v`jq -r .version package.json`.zip"
+
+build\:firefox:
+	@web-ext build -a build -n "`jq -r .name package.json`-v`jq -r .version package.json`.xpi"
 
 build:
-	@web-ext build -a build
+	@make chrome build:chrome && make firefox build:firefox
 
 sign:
 	@web-ext sign --api-key=$AMO_JWT_ISSUER --api-secret=$AMO_JWT_SECRET -a build
