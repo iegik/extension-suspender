@@ -19,8 +19,8 @@
     "default_icon": "favicon.ico"
   },
   "icons": {
-    "128": "favicon-x1.svg",
-    "256": "favicon-x2.svg"
+    "128": "favicon-128.png",
+    "256": "favicon-256.png"
   },
   "background": {
     "scripts": ["sw.js"]
