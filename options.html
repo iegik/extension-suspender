@@ -6,37 +6,23 @@
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Tab Suspender Settings</h1>
+  <div class="setting-group">
+    <label for="enabled">
+      <input type="checkbox" id="enabled">
+      Enable Tab Suspension
+    </label>
+    <p class="description">When enabled, inactive tabs will be automatically suspended to save memory and CPU usage.</p>
+  </div>
 
-    <div class="setting-group">
-      <label for="enabled">
-        <input type="checkbox" id="enabled">
-        Enable Tab Suspension
-      </label>
-      <p class="description">When enabled, inactive tabs will be automatically suspended to save memory and CPU usage.</p>
-    </div>
+  <div class="setting-group">
+    <label for="timeout">Inactivity Timeout (minutes):</label>
+    <input type="number" id="timeout" min="1" max="60" value="5">
+    <p class="description">Tabs will be suspended after this many minutes of inactivity.</p>
+  </div>
 
-    <div class="setting-group">
-      <label for="timeout">Inactivity Timeout (minutes):</label>
-      <input type="number" id="timeout" min="1" max="60" value="5">
-      <p class="description">Tabs will be suspended after this many minutes of inactivity.</p>
-    </div>
-
-    <div class="setting-group">
-      <h3>How it works:</h3>
-      <ul>
-        <li>Inactive tabs are suspended by navigating to <code>about:blank#original-url</code></li>
-        <li>When you click on a suspended tab, it automatically restores the original page</li>
-        <li>Special pages (chrome://, about:, etc.) are never suspended</li>
-        <li>Click the extension icon to manually suspend/restore the current tab</li>
-      </ul>
-    </div>
-
-    <div class="setting-group">
-      <button id="save">Save Settings</button>
-      <span id="status"></span>
-    </div>
+  <div class="setting-group">
+    <button id="save">Save Settings</button>
+    <span id="status"></span>
   </div>
 
   <script src="options.js"></script>

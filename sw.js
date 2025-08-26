@@ -10,7 +10,7 @@ let suspendedTabs = new Set(); // Set of suspended tabIds
 // Use a WeakMap for tabActivityTimers if possible (tabId is a number, so fallback to Map)
 let tabActivityTimers = new Map(); // tabId -> timer
 const defaultSettings = Object.freeze({
-  inactivityTimeout: 1 * minutes, // 1 minute
+  inactivityTimeout: 5 * minutes, // 5 minutes
   enabled: true
 });
 
@@ -313,11 +313,19 @@ suspendTab = async function(tabId) {
   }
 };
 
+const formatTime = (t) => new Intl.DateTimeFormat('en-us', {
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+    timeZone: 'UTC'
+}).format(t)
+
 // Settings management
 browser.storage.onChanged.addListener(async (changes) => {
   try {
     if (changes.inactivityTimeout) {
-      console.log('Timeout changed to:', changes.inactivityTimeout.newValue / 1000, 'seconds');
+      console.log('Timeout changed to:', formatTime(changes.inactivityTimeout.newValue));
       settings.inactivityTimeout = changes.inactivityTimeout.newValue;
 
       // Clear all existing timers

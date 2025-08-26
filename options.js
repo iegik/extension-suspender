@@ -11,7 +11,7 @@ const minutes = 60 * 1000;
 // Load current settings
 browser.storage.local.get(['enabled', 'inactivityTimeout'], (result) => {
   enabledCheckbox.checked = result.enabled !== false; // Default to true
-  timeoutInput.value = Math.max(1, Math.min(60, (result.inactivityTimeout || 1 * minutes) / (minutes)));
+  timeoutInput.value = Math.max(1, Math.min(60, (result.inactivityTimeout || 5 * minutes) / (minutes)));
 });
 
 // Save settings
