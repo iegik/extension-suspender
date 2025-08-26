@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tab Suspender",
   "description": "Suspends inactive tabs to save memory and CPU usage",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "permissions": [
     "tabs",
     "storage",
